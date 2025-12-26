@@ -1,0 +1,150 @@
+import os
+import logging
+from datetime import datetime
+from typing import Dict, Optional, List
+
+from sqlalchemy import create_engine, desc
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+
+from stocksense.models import Base, AnalysisCache
+
+def _resolve_db_path() -> str:
+    """Resolve database path with graceful fallbacks."""
+    logger = logging.getLogger("stocksense.database")
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+
+    env_path = os.getenv("STOCKSENSE_DB_PATH")
+    candidates = []
+
+    if env_path:
+        abs_env_path = os.path.abspath(env_path)
+        candidates.append(abs_env_path)
+        if abs_env_path.startswith("/var/") and not os.getenv("RENDER"):
+            data_dir = os.path.join(project_root, "data")
+            os.makedirs(data_dir, exist_ok=True)
+            candidates.append(os.path.join(data_dir, os.path.basename(abs_env_path)))
+
+    data_dir = os.path.join(project_root, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    candidates.append(os.path.join(data_dir, "stocksense.db"))
+
+    candidates.append(os.path.join(project_root, "stocksense.db"))
+
+    chosen_path = None
+    for path in candidates:
+        dir_path = os.path.dirname(path)
+        try:
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path, exist_ok=True)
+            chosen_path = path
+            break
+        except (PermissionError, OSError) as e:
+            logger.debug(f"Path not writable, trying next candidate: {dir_path} ({e})")
+            continue
+
+    if chosen_path is None:
+        logger.error("No writable path for SQLite DB; using in-memory database.")
+        return ":memory:"
+
+    if env_path and os.path.abspath(env_path) != chosen_path:
+        logger.info(
+            "Using fallback database path %s (env path not writable: %s)",
+            chosen_path,
+            env_path,
+        )
+
+    return chosen_path
+
+
+DB_PATH = _resolve_db_path()
+ENGINE = create_engine(f"sqlite:///{DB_PATH}")
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=ENGINE)
+
+def init_db() -> None:
+    """Initialize the database and create tables."""
+    try:
+        Base.metadata.create_all(bind=ENGINE)
+    except SQLAlchemyError as e:
+        logging.error(f"Error initializing database: {e}")
+        raise
+
+
+def save_analysis(ticker: str, summary: str, sentiment_report: str) -> None:
+    """Save analysis results to the database cache."""
+    session = SessionLocal()
+    try:
+        new_analysis = AnalysisCache(
+            ticker=ticker.upper(),
+            analysis_summary=summary,
+            sentiment_report=sentiment_report,
+            timestamp=datetime.utcnow()
+        )
+        session.add(new_analysis)
+        session.commit()
+    except SQLAlchemyError as e:
+        session.rollback()
+        logging.error(f"Error saving analysis: {e}")
+        raise
+    finally:
+        session.close()
+
+
+def get_latest_analysis(ticker: str) -> Optional[Dict[str, str]]:
+    """Retrieve the most recent analysis for a given ticker."""
+    session = SessionLocal()
+    try:
+        analysis = (
+            session.query(AnalysisCache)
+            .filter(AnalysisCache.ticker == ticker.upper())
+            .order_by(desc(AnalysisCache.timestamp))
+            .first()
+        )
+        if analysis:
+            return {
+                'id': analysis.id,
+                'ticker': analysis.ticker,
+                'analysis_summary': analysis.analysis_summary,
+                'sentiment_report': analysis.sentiment_report,
+                'timestamp': analysis.timestamp.isoformat(),
+            }
+        return None
+    except SQLAlchemyError as e:
+        logging.error(f"Error getting latest analysis: {e}")
+        return None
+    finally:
+        session.close()
+
+
+def get_all_cached_tickers() -> List[str]:
+    """Get a list of all tickers that have cached analysis data."""
+    session = SessionLocal()
+    try:
+        tickers = (
+            session.query(AnalysisCache.ticker)
+            .distinct()
+            .order_by(desc(AnalysisCache.timestamp))
+            .all()
+        )
+        return [ticker[0] for ticker in tickers]
+    except SQLAlchemyError as e:
+        logging.error(f"Error getting all cached tickers: {e}")
+        return []
+    finally:
+        session.close()
+
+
+if __name__ == '__main__':
+    init_db()
+    sample_ticker = "AAPL"
+    sample_summary = "Apple showed strong performance with positive earnings."
+    sample_sentiment = "Overall sentiment: Positive. Headlines show bullish outlook."
+    save_analysis(sample_ticker, sample_summary, sample_sentiment)
+    retrieved_data = get_latest_analysis(sample_ticker)
+    print(f"Retrieved data: {retrieved_data}")
+    non_existent = get_latest_analysis("NONEXISTENT")
+    print(f"Non-existent data: {non_existent}")
+    cached_tickers = get_all_cached_tickers()
+    print(f"Cached tickers: {cached_tickers}")

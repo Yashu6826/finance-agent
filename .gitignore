@@ -1,0 +1,120 @@
+# =============================================================================
+# =============================================================================
+# -- Project-Specific Files --
+# =============================================================================
+
+# Ignore all .env files...
+.env
+.env.*
+
+# ...but DO commit the example template file.
+!/.env.example
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# =============================================================================
+# -- Python & Virtual Environments --
+# =============================================================================
+
+# Byte-compiled / optimized / C extensions
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+pytestdebug.log
+
+# C extensions
+*.so
+
+# Environments (Conda & venv)
+.venv
+venv/
+env/
+.env/
+/env/
+/venv/
+.conda/
+deploy_test_env/
+docker-compose.override.yml
+
+# Local database (explicit)
+stocksense.db
+*.db
+
+# =============================================================================
+# -- Editor & IDE Files --
+# =============================================================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Streamlit secrets (never commit live backend URLs or keys)
+.streamlit/secrets.toml
+
+# DevContainer (personal development environment)
+.devcontainer/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+.Project_description.md
+
+# =============================================================================
+# -- General & OS-Specific Files --
+# =============================================================================
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
