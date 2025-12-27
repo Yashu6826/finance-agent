@@ -16,15 +16,10 @@ from stocksense.data_collectors import get_stock_currency, get_stock_info
 PLOTLY_AVAILABLE = True
 
 st.set_page_config(
-    page_title="StockSense AI Research Agent",
+    page_title="FinanceBot AI Research Agent",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/Spkap/StockSense-AI',
-        'Report a bug': 'https://github.com/Spkap/StockSense-AI/issues',
-        'About': "# StockSense ReAct Agent\nAI-powered autonomous financial research using ReAct pattern"
-    }
 )
 
 st.markdown("""
@@ -196,54 +191,87 @@ def create_candlestick_chart(price_data: list, currency: str = "USD") -> Optiona
     """Create an interactive candlestick chart with moving averages."""
     if not price_data:
         return None
+    
+    try:
+        df = pd.DataFrame(price_data)
         
-    df = pd.DataFrame(price_data)
-    df['Date'] = pd.to_datetime(df['Date'])
-    df = df.sort_values('Date')
+        # Ensure Date column exists
+        if 'Date' not in df.columns:
+            st.error("Missing 'Date' column in price data")
+            return None
+        
+        # Convert Date to datetime
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        
+        # Remove rows with invalid dates
+        df = df.dropna(subset=['Date'])
+        
+        if df.empty:
+            st.error("No valid date data found")
+            return None
+        
+        df = df.sort_values('Date')
+        
+        # Ensure required columns exist
+        required_cols = ['Open', 'High', 'Low', 'Close']
+        for col in required_cols:
+            if col not in df.columns:
+                st.error(f"Missing '{col}' column in price data")
+                return None
+        
+        df['SMA_20'] = df['Close'].rolling(window=20, min_periods=1).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50, min_periods=1).mean()
+    except KeyError as e:
+        st.error(f"Error creating chart: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"Error processing price data: {str(e)}")
+        return None
     
-    df['SMA_20'] = df['Close'].rolling(window=20, min_periods=1).mean()
-    df['SMA_50'] = df['Close'].rolling(window=50, min_periods=1).mean()
-    
-    fig = go.Figure()
-    
-    fig.add_trace(go.Candlestick(
-        x=df['Date'],
-        open=df['Open'],
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close'],
-        name="Price",
-        increasing_line_color='#26a69a',
-        decreasing_line_color='#ef5350'
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['SMA_20'],
-        mode='lines',
-        name='SMA 20',
-        line=dict(color='orange', width=2)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['SMA_50'],
-        mode='lines',
-        name='SMA 50',
-        line=dict(color='blue', width=2)
-    ))
-    
-    fig.update_layout(
-        title=f"Stock Price with Moving Averages - {currency}",
-        yaxis_title=f"Price ({currency})",
-        xaxis_title="Date",
-        template="plotly_white",
-        height=500,
-        showlegend=True,
-        xaxis_rangeslider_visible=False
-    )
-    
-    return fig
+    try:
+        fig = go.Figure()
+        
+        fig.add_trace(go.Candlestick(
+            x=df['Date'],
+            open=df['Open'],
+            high=df['High'],
+            low=df['Low'],
+            close=df['Close'],
+            name="Price",
+            increasing_line_color='#26a69a',
+            decreasing_line_color='#ef5350'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=df['Date'],
+            y=df['SMA_20'],
+            mode='lines',
+            name='SMA 20',
+            line=dict(color='orange', width=2)
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=df['Date'],
+            y=df['SMA_50'],
+            mode='lines',
+            name='SMA 50',
+            line=dict(color='blue', width=2)
+        ))
+        
+        fig.update_layout(
+            title=f"Stock Price with Moving Averages - {currency}",
+            yaxis_title=f"Price ({currency})",
+            xaxis_title="Date",
+            template="plotly_white",
+            height=500,
+            showlegend=True,
+            xaxis_rangeslider_visible=False
+        )
+        
+        return fig
+    except Exception as e:
+        st.error(f"Error creating chart visualization: {str(e)}")
+        return None
 
 try:
     BACKEND_URL = st.secrets.get("BACKEND_URL", os.getenv("BACKEND_URL", "http://127.0.0.1:8000"))
@@ -281,8 +309,8 @@ def create_styled_header():
             '<path d="M10 25c1-4 5-6 8-6s7 2 8 6" />'
             '</g>'
             '</svg></a>'
-            '<a href="https://github.com/Spkap/StockSense-AI" target="_blank" rel="noopener noreferrer" '
-            'title="StockSense-AI — repository" aria-label="Repository StockSense-AI" role="link" tabindex="0" '
+            '<a href="https://github.com/Yashu6826/finance-agent" target="_blank" rel="noopener noreferrer" '
+            'title="FinanceBot-AI — repository" aria-label="Repository FinanceBot-AI" role="link" tabindex="0" '
             'style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; padding:6px; border-radius:8px; background: rgba(255,255,255,0.02); transition: transform 0.12s ease, background 0.12s ease;" '
             'onmouseover="this.style.background=\'rgba(255,255,255,0.12)\'; this.style.transform=\'scale(1.06)\'" '
             'onmouseout="this.style.background=\'rgba(255,255,255,0.02)\'; this.style.transform=\'none\'">'
@@ -290,7 +318,7 @@ def create_styled_header():
             '<path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />'
             '</svg></a>'
             '</div>'
-            '<h1 style="color: white; text-align: center; margin: 0; font-size: 1.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📈 StockSense AI Research Agent</h1>'
+            '<h1 style="color: white; text-align: center; margin: 0; font-size: 1.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📈 FinanceBot AI Research Agent</h1>'
             '<p style="color: #f0f0f0; text-align: center; margin: 0.35rem 0 0 0; font-size: 1rem; opacity: 0.92;">Universal Financial Research Using Reasoning & Action</p>'
             '</div>'
         )
@@ -299,7 +327,7 @@ def create_styled_header():
     except Exception:
         st.markdown(
             '<div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 1.6rem 1rem; border-radius: 10px; margin-bottom: 1.6rem;">'
-            '<h1 style="color: white; text-align: center; margin: 0; font-size: 1.5rem;">📈 StockSense AI Research Agent</h1>'
+            '<h1 style="color: white; text-align: center; margin: 0; font-size: 1.5rem;">📈 FinanceBot AI Research Agent</h1>'
             '<p style="color: #f0f0f0; text-align: center; margin: 0.35rem 0 0 0; font-size: 1rem;">Universal Financial Research Using Reasoning & Action</p>'
             '</div>',
             unsafe_allow_html=True,
@@ -931,7 +959,7 @@ def main():
             # Welcome screen
             st.markdown("""
             <div class="analysis-card fade-in" style="text-align: center; padding: 3rem;">
-                <h3>👋 Welcome to StockSense Universal Research</h3>
+                <h3>👋 Welcome to FinanceBot Universal Research</h3>
                 <p style="font-size: 1.1rem; color: #666; margin: 1.5rem 0;">
                     Ask me anything about stocks, markets, or financial news
                 </p>

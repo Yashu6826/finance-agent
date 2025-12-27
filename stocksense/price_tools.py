@@ -49,13 +49,13 @@ class PriceDataTools:
             price_data = []
             for date, row in hist.iterrows():
                 price_data.append({
-                    "date": date.strftime('%Y-%m-%d'),
-                    "open": float(row['Open']),
-                    "high": float(row['High']),
-                    "low": float(row['Low']),
-                    "close": float(row['Close']),
-                    "volume": int(row['Volume']),
-                    "adj_close": float(row['Close'])
+                    "Date": date.strftime('%Y-%m-%d'),
+                    "Open": float(row['Open']),
+                    "High": float(row['High']),
+                    "Low": float(row['Low']),
+                    "Close": float(row['Close']),
+                    "Volume": int(row['Volume']),
+                    "Adj_Close": float(row['Close'])
                 })
             
             # Calculate metrics

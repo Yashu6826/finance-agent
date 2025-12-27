@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, TypedDict, Literal, Any
 from datetime import datetime
 import traceback
+import logging
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -23,6 +24,10 @@ from .analyzer import analyze_sentiment_of_headlines
 from .database import save_analysis
 from .price_tools import PriceDataTools
 
+# Setup logging
+logger = logging.getLogger(__name__)
+logger.info("🚀 React Agent module loading...")
+
 
 class AgentState(TypedDict):
     """Enhanced state for universal research agent."""
@@ -42,6 +47,7 @@ class AgentState(TypedDict):
     reasoning_steps: List[str]
     tools_used: List[str]
     iterations: int
+    web_results: List[Dict[str, Any]]
     max_iterations: int
     final_decision: str
     error: Optional[str]
@@ -108,6 +114,12 @@ def intelligent_research_tool(query: str, days: int = 30, max_articles: int = 10
     """
     Universal financial research tool - works for ANY query.
     Can handle: tickers, company names, market trends, news queries, etc.
+    For TICKER queries: Formulates proper search query and fetches news articles
+    For GENERAL queries: 
+        1. First does DuckDuckGo web search to get context
+        2. Then fetches actual news articles from multiple source
+
+    Returns both web_results and articles for comprehensive analysis.
     """
     try:
         print(f"\n🔍 Starting intelligent research for: {query}")
@@ -122,6 +134,7 @@ def intelligent_research_tool(query: str, days: int = 30, max_articles: int = 10
         if research_data and research_data.get('articles'):
             articles = research_data['articles']
             query_analysis = research_data['query_analysis']
+            web_results = research_data.get('web_results', [])
             summary_info = research_data['summary_info']
             
             # Format for LLM
@@ -132,6 +145,7 @@ def intelligent_research_tool(query: str, days: int = 30, max_articles: int = 10
                 "query": query,
                 "query_analysis": query_analysis,
                 "articles": articles,
+                "web_results": web_results,
                 "formatted_content": formatted_content,
                 "summary_info": summary_info,
                 "search_queries_used": research_data.get('search_queries_used', []),
@@ -143,6 +157,7 @@ def intelligent_research_tool(query: str, days: int = 30, max_articles: int = 10
                 "success": False,
                 "error": f"No relevant information found for: {query}",
                 "articles": [],
+                "web_results": [],
                 "formatted_content": f"Unable to find relevant information for: {query}",
                 "message": "⚠ No results found"
             }
@@ -154,6 +169,7 @@ def intelligent_research_tool(query: str, days: int = 30, max_articles: int = 10
             "success": False,
             "error": f"{type(e).__name__}: {error_msg}",
             "articles": [],
+            "web_results": [],
             "formatted_content": f"Research failed: {type(e).__name__}",
             "message": f"✗ Research failed"
         }
@@ -183,11 +199,11 @@ def fetch_price_data_tool(ticker: str, period: str = "1mo") -> Dict:
         for record in df_reset.to_dict(orient='records'):
             price_record = {
                 'Date': record['Date'],
-                'Open': float(record['Open']) if record['Open'] is not None else None,
-                'High': float(record['High']) if record['High'] is not None else None,
-                'Low': float(record['Low']) if record['Low'] is not None else None,
-                'Close': float(record['Close']) if record['Close'] is not None else None,
-                'Volume': int(record['Volume']) if record['Volume'] is not None else None
+                'Open': float(record['Open']) if pd.notna(record['Open']) else None,
+                'High': float(record['High']) if pd.notna(record['High']) else None,
+                'Low': float(record['Low']) if pd.notna(record['Low']) else None,
+                'Close': float(record['Close']) if pd.notna(record['Close']) else None,
+                'Volume': int(record['Volume']) if pd.notna(record['Volume']) else None
             }
             price_data.append(price_record)
         
@@ -490,6 +506,7 @@ def generate_final_analysis(state: AgentState) -> Dict[str, Any]:
         "current_price": state.get("current_price"),
         "currency": state.get("currency"),
         "price_analysis": state.get("price_analysis", {}),
+        "web_results": state.get("web_results", []),
         "reasoning_steps": state.get("reasoning_steps", []),
         "tools_used": state.get("tools_used", []),
         "iterations": state.get("iterations", 0),
@@ -517,17 +534,25 @@ def generate_final_analysis(state: AgentState) -> Dict[str, Any]:
 
 
 def create_react_agent() -> StateGraph:
+    logger.info("📌 Creating ReAct Agent...")
     try:
+        logger.info("🔌 Initializing LLM (gemini-2.5-flash-lite)...")
         llm = get_chat_llm(
             model="gemini-2.5-flash-lite",
             temperature=0.1,
             max_output_tokens=2048
         )
+        logger.info("✅ LLM initialized successfully")
     except Exception as e:
+        logger.error(f"❌ Failed to initialize LLM: {type(e).__name__}: {e}")
+        logger.error(f"   Full error: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
         print(f"Failed to initialize LLM: {type(e).__name__}")
         raise
     
+    logger.debug("🔧 Binding tools to LLM...")
     llm_with_tools = llm.bind_tools(tools)
+    logger.debug("✅ Tools bound successfully")
 
     def agent_node(state: AgentState) -> AgentState:
         """Main agent reasoning node."""
@@ -870,6 +895,7 @@ def run_universal_research(query: str, query_type: str = "auto") -> Dict:
             "iterations": 0,
             "max_iterations": 6,
             "final_decision": "",
+            "web_results": [],
             "error": None,
             "has_sufficient_data": False,
             "should_fetch_price_data": False

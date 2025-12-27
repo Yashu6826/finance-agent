@@ -44,6 +44,79 @@ def extract_domain(url: str) -> str:
         return domain.split('.')[0].title()
     except:
         return 'Unknown'
+    
+
+def fetch_web_search_results(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    """
+    Fetch general web search results from DuckDuckGo (NOT news, just web results).
+    This gives us URLs and snippets that we can then use to fetch full articles.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        
+        print(f"🔍 DuckDuckGo Web Search for: {query}")
+        
+        ddgs = DDGS()
+        # Use .text() for general web search, not .news()
+        results = ddgs.text(query, max_results=max_results)
+        
+        search_results = []
+        for result in results:
+            search_results.append({
+                'title': result.get('title', ''),
+                'snippet': result.get('body', '')[:300],
+                'url': result.get('href', ''),
+                'source': extract_domain(result.get('href', '')),
+            })
+        
+        if search_results:
+            print(f"✓ DuckDuckGo Web Search: Found {len(search_results)} results")
+        else:
+            print(f"⚠ DuckDuckGo Web Search: No results found for '{query}'")
+        return search_results
+        
+    except ImportError:
+        print("⚠ DuckDuckGo: Library not installed (pip install duckduckgo-search)")
+        return []
+    except Exception as e:
+        print(f"⚠ DuckDuckGo Web Search error: {type(e).__name__}: {str(e)[:100]}")
+        return []
+
+def fetch_from_duckduckgo(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    """Fetch news from DuckDuckGo search."""
+    try:
+        from duckduckgo_search import DDGS
+        
+        print(f"🔍 Searching DuckDuckGo for: {query}")
+        
+        ddgs = DDGS()
+        results = ddgs.news(query, max_results=max_results)
+        
+        news_items = []
+        for result in results:
+            news_items.append({
+                'title': result.get('title', ''),
+                'description': result.get('body', '')[:500],
+                'url': result.get('url', ''),
+                'published_at': result.get('date', datetime.now().isoformat()),
+                'source': result.get('source', extract_domain(result.get('url', ''))),
+                'content_snippet': result.get('body', ''),
+                'full_content': result.get('body', ''),
+                'score': 10,  # Default score for DDG results
+            })
+        
+        if news_items:
+            print(f"✓ DuckDuckGo: Found {len(news_items)} articles")
+        else:
+            print(f"⚠ DuckDuckGo: No articles found for '{query}'")
+        return news_items
+        
+    except ImportError:
+        print("⚠ DuckDuckGo: Library not installed (pip install duckduckgo-search)")
+        return []
+    except Exception as e:
+        print(f"⚠ DuckDuckGo error: {type(e).__name__}: {str(e)[:100]}")
+        return []
 
 
 def fetch_from_tavily_news(query: str, days: int = 7, max_results: int = 10) -> List[Dict[str, Any]]:
@@ -57,10 +130,9 @@ def fetch_from_tavily_news(query: str, days: int = 7, max_results: int = 10) -> 
         from tavily import TavilyClient
         
         client = TavilyClient(api_key=tavily_api_key)
-        search_query = f"{query} stock news analysis"
         
         response = client.search(
-            query=search_query,
+            query=query,
             search_depth="basic",
             max_results=max_results,
             include_domains=[
@@ -278,7 +350,7 @@ def deduplicate_articles(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 
 def get_comprehensive_news(
-    ticker: str, 
+    query: str, 
     days: int = 30,
     fetch_full_content: bool = False,
     max_articles: int = 10,
@@ -290,41 +362,36 @@ def get_comprehensive_news(
     Restricted to 10 articles maximum for performance.
     """
     print(f"\n{'='*60}")
-    print(f"Fetching news for {ticker} (max 10 articles)")
+    print(f"Fetching news for {query} (max 10 articles)")
     print(f"{'='*60}")
     
     # Get company name
-    company_name = get_company_name_from_ticker(ticker)
-    ticker_clean = ticker.upper().replace('.BO', '').replace('.NS', '').replace('.L', '')
+
     
-    search_queries = [ticker_clean]
-    if company_name:
-        search_queries.append(company_name)
-        print(f"Company: {company_name}")
+    # CHANGED: Formulate proper query for stock details
+    print(f"Search Query: {query}")
     
     all_articles = []
     
     # 1. Tavily - Priority (if available)
     if use_tavily:
         print("\n[1/4] Trying Tavily AI Search...")
-        for query in search_queries:
-            tavily_articles = fetch_from_tavily_news(query, days, max_results=10)
-            if tavily_articles:
-                all_articles.extend(tavily_articles)
-                print(f"✓ Tavily successful: {len(tavily_articles)} articles")
-                # Early exit if we have enough articles
-                if len(all_articles) >= max_articles:
-                    unique_articles = deduplicate_articles(all_articles)[:max_articles]
-                    print(f"\n{'='*60}")
-                    print(f"articles are {unique_articles}")
-                    print(f"✓ Final: {len(unique_articles)} articles (early exit - quota reached)")
-                    print(f"{'='*60}\n")
-                    return unique_articles
-                break
+        tavily_articles = fetch_from_tavily_news(query, days, max_results=10)
+        if tavily_articles:
+            all_articles.extend(tavily_articles)
+            print(f"✓ Tavily successful: {len(tavily_articles)} articles")
+            # Early exit if we have enough articles
+            if len(all_articles) >= max_articles:
+                unique_articles = deduplicate_articles(all_articles)[:max_articles]
+                print(f"\n{'='*60}")
+                print(f"articles are {unique_articles}")
+                print(f"✓ Final: {len(unique_articles)} articles (early exit - quota reached)")
+                print(f"{'='*60}\n")
+                return unique_articles
     
     # 2. Yahoo Finance
     print("\n[2/4] Trying Yahoo Finance...")
-    yahoo_articles = fetch_from_yahoo_finance(ticker)
+    yahoo_articles = fetch_from_yahoo_finance(query)
     if yahoo_articles:
         all_articles.extend(yahoo_articles)
         if len(all_articles) >= max_articles:
@@ -337,30 +404,26 @@ def get_comprehensive_news(
     
     # 3. NewsAPI
     print("\n[3/4] Trying NewsAPI...")
-    for query in search_queries:
-        newsapi_articles = fetch_from_newsapi(query, days)
-        if newsapi_articles:
-            all_articles.extend(newsapi_articles)
-            print(f"✓ NewsAPI successful: {len(newsapi_articles)} articles")
-            if len(all_articles) >= max_articles:
-                unique_articles = deduplicate_articles(all_articles)[:max_articles]
-                print(f"\n{'='*60}")
-                print(f"articles are {unique_articles}")
-                print(f"✓ Final: {len(unique_articles)} articles (early exit - quota reached)")
-                print(f"{'='*60}\n")
-                return unique_articles
-            break
+    newsapi_articles = fetch_from_newsapi(query, days)
+    if newsapi_articles:
+        all_articles.extend(newsapi_articles)
+        print(f"✓ NewsAPI successful: {len(newsapi_articles)} articles")
+        if len(all_articles) >= max_articles:
+            unique_articles = deduplicate_articles(all_articles)[:max_articles]
+            print(f"\n{'='*60}")
+            print(f"articles are {unique_articles}")
+            print(f"✓ Final: {len(unique_articles)} articles (early exit - quota reached)")
+            print(f"{'='*60}\n")
+            return unique_articles
     
     # 4. Google News (optional) - only if we need more articles
     if len(all_articles) < max_articles:
         print("\n[4/4] Trying Google News...")
         try:
             import feedparser
-            for query in search_queries:
-                google_articles = fetch_from_google_news(query)
-                if google_articles:
-                    all_articles.extend(google_articles)
-                    break
+            google_articles = fetch_from_google_news(query)
+            if google_articles:
+                all_articles.extend(google_articles)
         except ImportError:
             pass
     
@@ -456,30 +519,30 @@ def format_research_for_llm(research_data: Dict[str, Any]) -> str:
     """
     articles = research_data.get('articles', [])
     query = research_data.get('query', 'Unknown')
+    web_results = research_data.get('web_results', [])
     query_analysis = research_data.get('query_analysis', {})
     summary_info = research_data.get('summary_info', {})
     search_queries = research_data.get('search_queries_used', [])
     
     formatted = f"""
 FINANCIAL RESEARCH DATA
-{'='*80}
 
 QUERY INFORMATION
-{'-'*80}
+
 Original Query: {query}
 Query Type: {query_analysis.get('type', 'general')}
 Search Queries Used: {', '.join(search_queries) if search_queries else 'Original query'}
 Analysis Date: {datetime.now().strftime('%B %d, %Y')}
 
 DATA SUMMARY
-{'-'*80}
+Web results: {web_results}
 Total Articles: {len(articles)}
 Average Relevance Score: {summary_info.get('avg_relevance', 0):.2f}/20.0
 Date Range: {summary_info.get('date_range', 'Last 30 days')}
 Primary Sources: {', '.join(summary_info.get('top_sources', []))}
 
 ARTICLE DETAILS
-{'-'*80}
+
 """
     
     for i, article in enumerate(articles, 1):
@@ -516,6 +579,10 @@ def get_intelligent_research(
     Intelligent research function that works with ANY query type.
     Automatically detects whether query is a ticker, company name, or general topic.
     
+    IMPROVED LOGIC:
+    - For ticker queries: Formulates proper search query like "what are the stock details of {company_name}"
+    - For general queries: Uses DuckDuckGo first, then supplements with other sources
+    
     Args:
         query: The search query (ticker, company name, or topic)
         days: Number of days of news to fetch
@@ -538,57 +605,83 @@ def get_intelligent_research(
     query_analysis = detect_query_type(query)
     print(f"Query Type: {query_analysis.get('type')}")
     
-    search_queries = [query]
     is_ticker = query_analysis.get('is_ticker', False)
+    all_articles = []
+    search_queries_used = []
     
-    # If it's a ticker, also search by company name
+    # Step 2: Handle based on query type
     if is_ticker:
+        # TICKER QUERY: Formulate proper search query
         ticker = query_analysis['ticker']
         company_name = get_company_name_from_ticker(ticker)
+        
         if company_name:
-            search_queries.append(company_name)
             query_analysis['company_name'] = company_name
+            search_query = f"what are the stock details of {company_name} stock price site:reuters.com OR site:bloomberg.com OR site:finance.yahoo.com"
             print(f"Company: {company_name}")
-    
-    # Step 2: Gather articles from multiple sources
-    all_articles = []
-    
-    print(f"\n📰 Gathering articles...")
-    
-    # Try to fetch from comprehensive sources
-    if is_ticker:
-        ticker = query_analysis['ticker']
-        # For tickers, use comprehensive news fetching
-        print(f"Fetching news for ticker: {ticker}")
+        else:
+            search_query = f"what are the stock details of {ticker} stock price site:reuters.com OR site:bloomberg.com OR site:finance.yahoo.com"
+        
+        print(f"Formulated Query: {search_query}")
+        search_queries_used.append(search_query)
+        
+        # Use comprehensive news fetching for tickers
         articles = get_comprehensive_news(
-            ticker,
+            query,
             days=days,
             fetch_full_content=fetch_full_content,
             max_articles=max_articles,
             use_tavily=True
         )
         all_articles.extend(articles)
+        
     else:
-        # For non-ticker queries, search using multiple methods
-        print(f"Fetching news for query: {query}")
+        # GENERAL QUERY: Use DuckDuckGo first
+        print(f"📰 General query detected - Using DuckDuckGo first")
+        search_queries_used.append(query)
         
-        # Try Tavily first
-        tavily_articles = fetch_from_tavily_news(query, days=days, max_results=max_articles)
-        if tavily_articles:
-            all_articles.extend(tavily_articles)
-            print(f"✓ Tavily: {len(tavily_articles)} articles")
+        web_results = fetch_web_search_results(query, max_results=10)
+        print("web_results are", web_results)
+        print(f"\n[1/4] Trying DuckDuckGo...")
+        refined_query = f"{query} stock price site:reuters.com OR site:bloomberg.com OR site:finance.yahoo.com"
+        ddg_articles = fetch_from_duckduckgo(refined_query, max_results=max_articles)
         
-        # If not enough, try NewsAPI
+        if web_results:
+            print(f"✓ Web Search: Found {len(web_results)} results")
+            print(f"   These will be shown to LLM for context")
+        
+        # STEP 2: Now fetch actual NEWS ARTICLES from multiple sources
+        print(f"\n[Step 2/2] Fetching News Articles...")
+
+        if ddg_articles:
+            all_articles.extend(ddg_articles)
+            print(f"✓ DuckDuckGo: {len(ddg_articles)} articles")
+            
+            # Early exit if we have enough high-quality articles
+            if len(all_articles) >= max_articles:
+                print(f"✓ Sufficient articles found from DuckDuckGo")
+        
+        # 2. If not enough articles, try Tavily
         if len(all_articles) < max_articles:
-            newsapi_articles = fetch_from_newsapi(query, days=days)
+            print(f"\n[2/4] Trying Tavily AI Search...")
+            tavily_articles = fetch_from_tavily_news(refined_query, days=days, max_results=max_articles)
+            if tavily_articles:
+                all_articles.extend(tavily_articles)
+                print(f"✓ Tavily: {len(tavily_articles)} articles")
+        
+        # 3. If still not enough, try NewsAPI
+        if len(all_articles) < max_articles:
+            print(f"\n[3/4] Trying NewsAPI...")
+            newsapi_articles = fetch_from_newsapi(refined_query, days=days)
             if newsapi_articles:
                 all_articles.extend(newsapi_articles)
                 print(f"✓ NewsAPI: {len(newsapi_articles)} articles")
         
-        # If still not enough, try Google News
+        # 4. If still not enough, try Google News
         if len(all_articles) < max_articles:
+            print(f"\n[4/4] Trying Google News...")
             try:
-                google_articles = fetch_from_google_news(query, num_results=max_articles)
+                google_articles = fetch_from_google_news(refined_query, num_results=max_articles)
                 if google_articles:
                     all_articles.extend(google_articles)
                     print(f"✓ Google News: {len(google_articles)} articles")
@@ -608,7 +701,8 @@ def get_intelligent_research(
     unique_articles = unique_articles[:max_articles]
     
     print(f"\n✓ Total unique articles: {len(unique_articles)}")
-    
+    if web_results:
+        print(f"✓ Web search results: {len(web_results)}")
     # Step 4: Calculate summary info
     sources = [article.get('source', 'Unknown') for article in unique_articles]
     unique_sources = list(set(sources))
@@ -622,19 +716,21 @@ def get_intelligent_research(
     
     summary_info = {
         "total_articles": len(unique_articles),
+        "total_web_results": len(web_results),
         "unique_sources": len(unique_sources),
         "top_sources": unique_sources[:5],
         "avg_relevance": avg_relevance,
         "date_range": date_range
     }
     
-    # Step 5: Return structured result
+    # Step 5: Return structured result (UNCHANGED - keeping same structure for LLM compatibility)
     result = {
         "query": query,
         "query_analysis": query_analysis,
+        "web_results": web_results,
         "articles": unique_articles,
         "summary_info": summary_info,
-        "search_queries_used": search_queries,
+        "search_queries_used": search_queries_used,
         "formatted_content": ""  # Will be filled by format_research_for_llm
     }
     
