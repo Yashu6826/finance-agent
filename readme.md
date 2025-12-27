@@ -102,6 +102,7 @@ Docker instructions removed (no Dockerfiles / compose file currently in repo).
 # Trigger ReAct agent finance-query analysis
 curl -X POST "http://localhost:8000/research"
 - research for any finance related query
+
 # Trigger ReAct agent analysis
 curl -X POST "http://localhost:8000/analyze/AAPL"
 
