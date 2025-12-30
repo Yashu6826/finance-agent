@@ -557,12 +557,31 @@ def trigger_research(query: str) -> Optional[Dict[str, Any]]:
         return None
 
 def display_research_results(data: Dict[str, Any], query: str):
-    """Display universal research results with enhanced formatting."""
+    """Display universal research results with comprehensive data handling."""
     
-    # Detect query type for better display
+    # Extract all data with defaults
     query_analysis = data.get('query_analysis', {})
+    web_results = data.get('web_results', [])
+    articles = data.get('articles', [])
+    summary = data.get('summary', '')
+    sentiment_report = data.get('sentiment_report', '')
+    price_data = data.get('price_data', [])
+    chart_data = data.get('chart_data')
+    technical_analysis = data.get('technical_analysis', {})
+    current_price = data.get('current_price')
+    currency = data.get('currency', 'USD')
+    price_analysis = data.get('price_analysis', {})
+    
     is_ticker = query_analysis.get('is_ticker', False)
     ticker = query_analysis.get('ticker', '')
+    
+    # Debug: Show what data we have
+    print(f"DEBUG Display:")
+    print(f"  - Articles: {len(articles)}")
+    print(f"  - Summary length: {len(summary)}")
+    print(f"  - Sentiment: {len(sentiment_report)}")
+    print(f"  - Price data: {len(price_data)}")
+    print(f"  - Currency: {currency}")
     
     # Create tabs
     if is_ticker and ticker:
@@ -570,15 +589,13 @@ def display_research_results(data: Dict[str, Any], query: str):
     else:
         tab1, tab2, tab3 = st.tabs(["📊 Research Summary", "📰 Articles & Sources", "⚙️ Agent Process"])
     
+    # TAB 1: Overview
     with tab1:
         if is_ticker and ticker:
             st.markdown(f"### 📊 Overview - {ticker}")
             
-            # Display currency and exchange info
-            try:
-                currency = data.get('currency', 'USD')
-                current_price = data.get('current_price')
-                
+            # Display price metrics if available
+            if current_price or currency:
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.info(f"💱 **Currency:** {currency}")
@@ -586,169 +603,186 @@ def display_research_results(data: Dict[str, Any], query: str):
                     if current_price:
                         st.metric("Current Price", f"{currency} {current_price:.2f}")
                 with col3:
-                    price_change = data.get('price_analysis', {}).get('price_change_pct', 0)
-                    st.metric("Change", f"{price_change:+.2f}%")
-            except Exception as e:
-                pass
+                    price_change = price_analysis.get('price_change_pct', 0)
+                    if price_change != 0:
+                        st.metric("Change", f"{price_change:+.2f}%")
         else:
             st.markdown(f"### 📊 Research Summary")
             st.markdown(f"**Query:** {query}")
         
-        # Display main summary
-        summary = data.get('summary', 'Research completed successfully')
-        
-        if summary and summary != "Research completed successfully":
+        # Display main summary - CRITICAL FIX
+        if summary and len(summary) > 50:
             st.markdown(f"""
             <div class="analysis-card fade-in">
                 <h4 style="color: #667eea; margin-bottom: 1rem; font-size: 1.3rem; border-bottom: 2px solid #e1e5e9; padding-bottom: 0.5rem;">
-                    📝 Analysis
+                    📝 Analysis Summary
                 </h4>
-                <div>{summary}</div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Display summary in markdown
+            st.markdown(summary)
+        elif articles and len(articles) > 0:
+            # Generate quick summary from articles if none exists
+            st.markdown(f"""
+            <div class="analysis-card fade-in">
+                <h4 style="color: #667eea; margin-bottom: 1rem; font-size: 1.3rem; border-bottom: 2px solid #e1e5e9; padding-bottom: 0.5rem;">
+                    📝 Quick Summary
+                </h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            quick_summary = f"Found {len(articles)} articles about {query}. "
+            quick_summary += "Top stories:\n\n"
+            for i, article in enumerate(articles[:3], 1):
+                quick_summary += f"{i}. **{article.get('title', 'N/A')}** ({article.get('source', 'Unknown')})\n\n"
+            
+            st.markdown(quick_summary)
         else:
-            st.info("📊 Detailed analysis summary not available")
+            st.warning("⚠️ No summary available. Check other tabs for data.")
         
-        # Display key findings
+        # Display summary info
         summary_info = data.get('summary_info', {})
-        if summary_info:
-            col1, col2, col3 = st.columns(3)
+        if summary_info or articles:
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                article_count = summary_info.get('total_articles', 0)
+                article_count = len(articles) if articles else summary_info.get('total_articles', 0)
                 st.metric("📰 Articles Found", article_count)
             
             with col2:
-                source_count = summary_info.get('unique_sources', 0)
-                st.metric("📚 Sources", source_count)
+                if articles:
+                    sources = list(set([a.get('source', 'Unknown') for a in articles]))
+                    st.metric("📚 Sources", len(sources))
+                else:
+                    st.metric("📚 Sources", summary_info.get('unique_sources', 0))
             
             with col3:
                 if summary_info.get('date_range'):
                     st.metric("📅 Date Range", summary_info['date_range'])
-    
-    # Tab 2 - Price Analysis (only for tickers) or Articles (for general queries)
+                elif articles:
+                    st.metric("📅 Articles", "Recent")
+            
+            with col4:
+                if web_results:
+                    st.metric("🌐 Web Results", len(web_results))
+
+        # Show web results if available
+        if web_results and len(web_results) > 0:
+            st.markdown("---")
+            st.markdown("""
+            <div class="analysis-card fade-in">
+                <h4 style="color: #667eea; margin-bottom: 1rem;">
+                    🌐 Web Research Context
+                </h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            for i, result in enumerate(web_results[:3], 1):
+                with st.expander(f"🌐 {i}. {result.get('title', 'Untitled')[:70]}..."):
+                    st.markdown(f"**Source:** {result.get('source', 'Unknown')}")
+                    if result.get('url'):
+                        st.markdown(f"**URL:** [{result['url']}]({result['url']})")
+                    if result.get('snippet'):
+                        st.markdown(f"**Summary:** {result['snippet']}")
+
+    # TAB 2: Price Analysis or Articles
     if is_ticker and ticker:
         with tab2:
             st.markdown("### 📈 Price Analysis")
             
-            # Display candlestick chart
-            price_data = data.get('price_data', [])
             if price_data and len(price_data) > 0:
                 try:
-                    currency = data.get('currency', 'USD')
                     fig = create_candlestick_chart(price_data, currency)
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                         st.success(f"📊 Displaying {len(price_data)} days of price data")
+                    else:
+                        st.error("Unable to create chart from price data")
                 except Exception as e:
-                    st.error(f"Error creating chart: {str(e)}")
+                    st.error(f"Chart error: {str(e)}")
             else:
-                st.info("📈 No historical price data available. Run analysis to fetch price data.")
+                st.info("📈 Price data not available. The agent may not have fetched it yet.")
             
-            # Display technical analysis
-            tech_analysis = data.get('technical_analysis', {})
-            if tech_analysis:
+            # Technical indicators
+            if technical_analysis and len(technical_analysis) > 0:
                 st.markdown("#### 🔬 Technical Indicators")
                 
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    if 'rsi' in tech_analysis:
-                        rsi = tech_analysis['rsi']
-                        rsi_status = "Overbought ⚠️" if rsi > 70 else "Oversold ✅" if rsi < 30 else "Neutral"
+                    if 'rsi' in technical_analysis:
+                        rsi = technical_analysis['rsi']
+                        rsi_status = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
                         st.metric("RSI", f"{rsi:.1f}", rsi_status)
                 
                 with col2:
-                    if 'ma20' in tech_analysis:
-                        st.metric("MA20", f"{tech_analysis['ma20']:.2f}")
+                    if 'ma20' in technical_analysis:
+                        st.metric("MA20", f"{currency} {technical_analysis['ma20']:.2f}")
                 
                 with col3:
-                    if 'ma50' in tech_analysis:
-                        st.metric("MA50", f"{tech_analysis['ma50']:.2f}")
+                    if 'ma50' in technical_analysis:
+                        st.metric("MA50", f"{currency} {technical_analysis['ma50']:.2f}")
                 
                 with col4:
-                    if 'volume' in tech_analysis:
-                        st.metric("Volume", f"{tech_analysis['volume']:,.0f}")
+                    if 'volume' in technical_analysis:
+                        vol = technical_analysis['volume']
+                        st.metric("Volume", f"{vol:,.0f}")
     else:
         with tab2:
             st.markdown("### 📰 Articles & Sources")
             
-            articles = data.get('articles', [])
-            if articles:
+            if articles and len(articles) > 0:
                 st.markdown(f"**Found {len(articles)} relevant articles**")
                 
                 for i, article in enumerate(articles[:10], 1):
-                    with st.expander(f"📄 {i}. {article.get('title', 'Untitled')[:80]}..."):
+                    title = article.get('title', 'Untitled')
+                    source = article.get('source', 'Unknown')
+                    published = article.get('published_at', 'N/A')
+                    description = article.get('description') or article.get('content_snippet', '')
+                    url = article.get('url', '')
+                    
+                    with st.expander(f"📄 {i}. {title[:80]}..."):
                         col1, col2 = st.columns([3, 1])
                         
                         with col1:
-                            st.markdown(f"**Title:** {article.get('title', 'N/A')}")
-                            st.markdown(f"**Source:** {article.get('source', 'Unknown')}")
-                            
-                            description = article.get('description') or article.get('content_snippet', '')
+                            st.markdown(f"**Title:** {title}")
+                            st.markdown(f"**Source:** {source}")
                             if description:
                                 st.markdown(f"**Summary:** {description[:300]}...")
                         
                         with col2:
-                            published = article.get('published_at', 'N/A')
-                            st.markdown(f"**Published:** {published}")
-                            
-                            if article.get('url'):
-                                # Continuation of the display_research_results function and remaining code
-
-                                st.markdown(f"[Read Full Article]({article['url']})")
+                            st.markdown(f"**Published:** {published[:10]}")
+                            if url:
+                                st.markdown(f"[Read Full Article]({url})")
             else:
-                st.info("No articles found for this query")
-    
-    # Tab 3 (or 2 for non-ticker) - News & Sentiment
+                st.warning("No articles found for this query")
+
+    # TAB 3: Sentiment
     sentiment_tab = tab3 if is_ticker else tab2
     
     with sentiment_tab:
         st.markdown("### 📰 News & Sentiment Analysis")
         
-        sentiment_report = data.get('sentiment_report', '')
-        
-        if sentiment_report:
+        # CRITICAL FIX: Always show sentiment if available
+        if sentiment_report and len(sentiment_report) > 10:
             st.markdown("""
                 <h4 style="color: #667eea; margin-bottom: 1rem; font-size: 1.3rem; border-bottom: 2px solid #e1e5e9; padding-bottom: 0.5rem;">
                     📊 Market Sentiment Report
                 </h4>
             """, unsafe_allow_html=True)
             
-            # Try to parse structured sentiment
-            if isinstance(sentiment_report, str):
-                try:
-                    sentiment_data = json.loads(sentiment_report)
-                    if isinstance(sentiment_data, list):
-                        for i, item in enumerate(sentiment_data, 1):
-                            headline = item.get('headline', 'N/A')
-                            sentiment = item.get('sentiment', 'N/A')
-                            justification = item.get('justification', 'N/A')
-                            
-                            with st.expander(f"📰 Article {i}: {headline[:80]}..."):
-                                st.markdown(f"**Headline:** {headline}")
-                                st.markdown(f"**Sentiment:** {sentiment}")
-                                st.markdown(f"**Analysis:** {justification}")
-                    else:
-                        st.markdown(sentiment_report)
-                except json.JSONDecodeError:
-                    st.markdown(sentiment_report)
-            elif isinstance(sentiment_report, list):
-                for i, item in enumerate(sentiment_report, 1):
-                    headline = item.get('headline', 'N/A')
-                    sentiment = item.get('sentiment', 'N/A')
-                    justification = item.get('justification', 'N/A')
-                    
-                    with st.expander(f"📰 Article {i}: {headline[:80]}..."):
-                        st.markdown(f"**Headline:** {headline}")
-                        st.markdown(f"**Sentiment:** {sentiment}")
-                        st.markdown(f"**Analysis:** {justification}")
-            else:
-                st.markdown(str(sentiment_report))
+            # Display sentiment report
+            st.markdown(sentiment_report)
+        elif articles and len(articles) > 0:
+            st.warning("⚠️ Sentiment analysis is pending. The agent should have analyzed the articles.")
+            st.info("Here are the articles that should be analyzed:")
+            for i, article in enumerate(articles[:3], 1):
+                st.markdown(f"{i}. **{article.get('title', 'N/A')}** ({article.get('source', 'Unknown')})")
         else:
-            st.info("No sentiment analysis available for this query")
-    
-    # Last tab - Agent Process
+            st.info("No sentiment analysis available - no articles were found.")
+
+    # TAB 4: Agent Process
     agent_tab = tab4 if is_ticker else tab3
     
     with agent_tab:
@@ -759,33 +793,27 @@ def display_research_results(data: Dict[str, Any], query: str):
         iterations = data.get('iterations', 0)
         is_cached = data.get('source') == 'cache'
         
-        has_meaningful_data = (reasoning_steps and not is_cached) or (tools_used and not is_cached)
-        
-        if has_meaningful_data:
+        if (reasoning_steps or tools_used) and not is_cached:
             st.markdown("""
                 <h4 style="color: #667eea; margin-bottom: 1rem; font-size: 1.3rem; border-bottom: 2px solid #e1e5e9; padding-bottom: 0.5rem;">
                     🧠 ReAct Agent Decision Process
                 </h4>
             """, unsafe_allow_html=True)
             
-            # Display reasoning steps
-            if reasoning_steps and not is_cached:
+            if reasoning_steps:
                 st.markdown("**📋 Reasoning Steps:**")
                 for i, step in enumerate(reasoning_steps, 1):
                     st.markdown(f"{i}. {step}")
             
-            # Display tools used
-            if tools_used and not is_cached:
+            if tools_used:
                 st.markdown("**🔧 Tools Used:**")
                 unique_tools = list(set(tools_used))
                 for tool in unique_tools:
                     st.markdown(f"• {tool}")
             
-            # Display iterations
-            if iterations and not is_cached:
+            if iterations:
                 st.markdown(f"**🔄 Analysis Iterations:** {iterations}")
             
-            # Display search queries used
             search_queries = data.get('search_queries_used', [])
             if search_queries:
                 st.markdown("**🔍 Search Queries Used:**")
@@ -793,13 +821,22 @@ def display_research_results(data: Dict[str, Any], query: str):
                     st.markdown(f"{i}. `{sq}`")
         else:
             if is_cached:
-                st.info("📚 This is a cached result. Reasoning steps are not available for cached results.")
+                st.info("📚 This is a cached result. Reasoning steps not available.")
             else:
                 st.warning("⚠️ No detailed reasoning information available.")
         
         # Debug info
         with st.expander("🔍 Raw Research Data (Debug)"):
-            st.json(data)
+            debug_data = {
+                "query": query,
+                "has_summary": len(summary) > 0,
+                "has_sentiment": len(sentiment_report) > 0,
+                "has_articles": len(articles),
+                "has_price_data": len(price_data),
+                "currency": currency,
+                "full_data": data
+            }
+            st.json(debug_data)
 
 def display_analysis_history():
     """Displays analysis history in sidebar."""

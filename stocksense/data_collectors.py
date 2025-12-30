@@ -595,6 +595,7 @@ def get_intelligent_research(
         - query_analysis: Analysis of the query type
         - summary_info: Summary statistics about the articles
         - search_queries_used: List of search queries that were used
+        - web_results: List of web search results (for general queries)
     """
     
     print(f"\n{'='*60}")
@@ -608,6 +609,7 @@ def get_intelligent_research(
     is_ticker = query_analysis.get('is_ticker', False)
     all_articles = []
     search_queries_used = []
+    web_results = []  # Initialize web_results for ALL query types
     
     # Step 2: Handle based on query type
     if is_ticker:
@@ -635,16 +637,17 @@ def get_intelligent_research(
         )
         all_articles.extend(articles)
         
+        # For ticker queries, web_results remain empty (no web search needed)
+        # web_results is already initialized to []
+        
     else:
         # GENERAL QUERY: Use DuckDuckGo first
         print(f"📰 General query detected - Using DuckDuckGo first")
         search_queries_used.append(query)
         
+        # STEP 1: Get web search context
         web_results = fetch_web_search_results(query, max_results=10)
         print("web_results are", web_results)
-        print(f"\n[1/4] Trying DuckDuckGo...")
-        refined_query = f"{query} stock price site:reuters.com OR site:bloomberg.com OR site:finance.yahoo.com"
-        ddg_articles = fetch_from_duckduckgo(refined_query, max_results=max_articles)
         
         if web_results:
             print(f"✓ Web Search: Found {len(web_results)} results")
@@ -652,6 +655,9 @@ def get_intelligent_research(
         
         # STEP 2: Now fetch actual NEWS ARTICLES from multiple sources
         print(f"\n[Step 2/2] Fetching News Articles...")
+        print(f"\n[1/4] Trying DuckDuckGo...")
+        refined_query = f"{query} stock financial details news"
+        ddg_articles = fetch_from_duckduckgo(refined_query, max_results=max_articles)
 
         if ddg_articles:
             all_articles.extend(ddg_articles)
@@ -703,6 +709,7 @@ def get_intelligent_research(
     print(f"\n✓ Total unique articles: {len(unique_articles)}")
     if web_results:
         print(f"✓ Web search results: {len(web_results)}")
+    
     # Step 4: Calculate summary info
     sources = [article.get('source', 'Unknown') for article in unique_articles]
     unique_sources = list(set(sources))
@@ -723,11 +730,11 @@ def get_intelligent_research(
         "date_range": date_range
     }
     
-    # Step 5: Return structured result (UNCHANGED - keeping same structure for LLM compatibility)
+    # Step 5: Return structured result
     result = {
         "query": query,
         "query_analysis": query_analysis,
-        "web_results": web_results,
+        "web_results": web_results,  # Now always defined
         "articles": unique_articles,
         "summary_info": summary_info,
         "search_queries_used": search_queries_used,

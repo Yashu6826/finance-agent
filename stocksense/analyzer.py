@@ -14,17 +14,16 @@ def analyze_sentiment_of_headlines(headlines: List[str]) -> str:
             temperature=0.3,
         )
 
-        numbered_headlines = "\n".join([f"{i+1}. {headline}" for i, headline in enumerate(headlines)])
+        
 
         prompt = f"""
 You are a financial sentiment analysis expert. Please analyze the sentiment of the following news headlines and provide insights for stock market research.
 
 Headlines to analyze:
-{numbered_headlines}
+
 
 For each headline, please:
 1. Classify the sentiment as 'Positive', 'Neutral', or 'Negative'
-2. Provide a brief justification (1-2 sentences)
 
 Then provide:
 - Overall market sentiment summary
